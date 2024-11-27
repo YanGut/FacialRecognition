@@ -195,14 +195,48 @@ def simple_perceptron(
 
     return W
 
+def simple_perceptron_test(
+    X_test: np.ndarray,
+    W: np.ndarray
+) -> np.ndarray:
+    """
+    Realiza a classificação de amostras desconhecidas usando um perceptron simples.
+
+    Args:
+        X_test (np.ndarray): Conjunto de entradas para teste, com dimensão (p+1, M), incluindo bias.
+        W (np.ndarray): Vetor de pesos aprendido na fase de treinamento, com dimensão (p+1, 1).
+
+    Returns:
+        np.ndarray: Vetor de predições, com dimensão (1, M), onde cada valor é -1 ou 1, 
+                    indicando a classe prevista para cada amostra.
+    """
+    p, M = X_test.shape
+    predictions = np.zeros((1, M))
+
+    for t in range(M):
+        x_unknown = X_test[:, t].reshape(p, 1)
+        
+        # Operação de decisão
+        u = W.T @ x_unknown
+        y = sign(u[0, 0])
+
+        # Classificação
+        predictions[0, t] = y
+
+        if y == -1:
+            print(f"Amostra {t} pertence à classe A.")
+        else:
+            print(f"Amostra {t} pertence à classe B.")
+
+    return predictions
 
 
 def main() -> None:
     columns = ["x", "y", "spiral"]
-    df: pd.DataFrame = load_csv_data(filepath = "../resources/spiral.csv", columns = columns, transpose = False)
+    df: pd.DataFrame = load_csv_data(filepath = "../../resources/spiral.csv", columns = columns, transpose = False)
     print(df.head())
     
-    # plot_data(df=df)
+    plot_data(df=df)
     
     data = prepare_data(df = df,
                         input_columns=["x", "y"],
