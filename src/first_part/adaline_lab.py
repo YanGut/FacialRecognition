@@ -111,16 +111,44 @@ def sign(u: float) -> int:
     """
     return 1 if u >= 0 else -1
 
-def simple_perceptron(
+def root_mean_square_error(
+    X_train: np.ndarray,
+    Y_train: np.ndarray,
+    w: np.ndarray
+):
+    """
+    Calcula o erro quadrático médio.
+
+    Args:
+        X_train (np.ndarray): Entradas para treinamento.
+        Y_train (np.ndarray): Rótulos para treinamento.
+        w (np.ndarray): Vetor de pesos.
+
+    Returns:
+        float: Erro quadrático médio.
+    """
+    p_1, N = X_train.shape
+    square_error = 0
+
+    for t in range(N):
+        x_t = X_train[:, t].reshape(p_1, 1)
+        u_t = (w.T @ x_t)[0, 0]
+        d_t = Y_train[0, t]
+        square_error += (d_t - u_t)**2
+
+    return square_error / (2 * N)
+
+def adaline_train(
     X_train: np.ndarray,
     Y_train: np.ndarray,
     epochs: int = 1000,
-    learning_rate: float = 0.01,
+    learning_rate: float = 0.1,
     w_random: bool = True,
-    data_frame: pd.DataFrame = None
+    data_frame: pd.DataFrame = None,
+    precision = 0.2
 ) -> np.ndarray:
     """
-    Implementa o Perceptron Simples.
+    Implementa o ANALINE.
 
     Args:
         X_train (np.ndarray): Entradas de treinamento, com dimensão (p+1, N), incluindo bias.
@@ -132,8 +160,11 @@ def simple_perceptron(
     Returns:
         np.ndarray: Vetor de pesos aprendido, com dimensão (p+1, 1).
     """
-    error = True
+    
     p, N = X_train.shape
+    root_mean_square_error1 = 0
+    root_mean_square_error2 = 1
+    history_of_mean_square_error = []
     
     if w_random:
         W = np.random.random_sample((p, 1)) - 0.5
@@ -149,7 +180,7 @@ def simple_perceptron(
         plt.scatter(data_frame[data_frame['spiral'] == -1.0]['x'], 
                     data_frame[data_frame['spiral'] == -1.0]['y'], 
                     color='red', label='Classe -1.0', alpha=0.7)
-    plt.title('Treinamento do Perceptron - Linha de Decisão', fontsize=16)
+    plt.title('Treinamento do ANALINE - Linha de Decisão', fontsize=16)
     plt.xlabel('X', fontsize=14)
     plt.ylabel('Y', fontsize=14)
     plt.legend()
@@ -160,22 +191,22 @@ def simple_perceptron(
     x_axis = np.linspace(-15, 15, 100)
 
     for epoch in range(epochs):
-        if not error:
+        if np.abs(root_mean_square_error1 - root_mean_square_error2) < precision:
             break
-
-        error = False  # Reseta o erro antes de cada época
+        
+        root_mean_square_error1 = root_mean_square_error(X_train, Y_train, W)
+        history_of_mean_square_error.append(root_mean_square_error1)
+        
         for t in range(N):
             x_t = X_train[:, t].reshape(p, 1)
             d_t = Y_train[0, t]
 
             u_t = W.T @ x_t
-            y_t = sign(u_t[0, 0])
-            e_t = d_t - y_t
-
-            W += (learning_rate * e_t * x_t) / 2
-
-            if y_t != d_t:
-                error = True
+            e_t = d_t - u_t
+            
+            W += learning_rate * e_t * x_t
+        
+        root_mean_square_error2 = root_mean_square_error(X_train, Y_train, W)
 
         # Atualiza a linha de decisão no mesmo gráfico
         if W[2, 0] != 0:
@@ -185,6 +216,8 @@ def simple_perceptron(
 
         plt.pause(0.1)  # Pequena pausa para visualização
 
+    history_of_mean_square_error.append(root_mean_square_error2)
+    
     # Linha final após o término do treinamento
     if W[2, 0] != 0:
         x2 = -W[1, 0] / W[2, 0] * x_axis + W[0, 0] / W[2, 0]
@@ -192,15 +225,22 @@ def simple_perceptron(
         plt.plot(x_axis, x2, color='green', linewidth=2)
 
     plt.show()
+    
+    plt.plot(history_of_mean_square_error)
+    plt.xlabel('Épocas')
+    plt.ylabel('Erro Quadrático Médio')
+    plt.title('Erro Quadrático Médio por Época')
+    plt.grid(alpha=0.3)
+    plt.show()
 
     return W
 
-def simple_perceptron_test(
+def adaline_test(
     X_test: np.ndarray,
     W: np.ndarray
 ) -> np.ndarray:
     """
-    Realiza a classificação de amostras desconhecidas usando um perceptron simples.
+    Realiza a classificação de amostras desconhecidas usando o ANALINE.
 
     Args:
         X_test (np.ndarray): Conjunto de entradas para teste, com dimensão (p+1, M), incluindo bias.
@@ -248,7 +288,7 @@ def main() -> None:
     print(data['X'].shape)
     print(data['Y'].shape)
     
-    weights = simple_perceptron(X_train = data['X'],
+    weights = adaline_train(X_train = data['X'],
                                 Y_train = data['Y'].reshape(1, -1),
                                 epochs = 100,
                                 learning_rate = 0.1,
