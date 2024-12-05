@@ -53,8 +53,9 @@ def prepare_data(
     input_columns: List[str], 
     target_column: str,
     transpose: bool = False,
+    normalize: bool = False,
     test_size: float = 0.2, 
-    random_state: int = 42
+    random_state: int = 42,
 ) -> dict:
     """
     Prepara o conjunto de dados para redes neurais, organizando entradas, saídas e divisões.
@@ -93,11 +94,30 @@ def prepare_data(
             -np.ones((N, 1)),
             X
         ), axis = 1)
+    
+    if normalize:
+        # na faixa de -1 a 1
+        X = 2 * (X - X.min()) / (X.max() - X.min()) - 1
 
     return {
         'X': X,
         'Y': Y,
     }
+
+def evaluate_accuracy(Y_true: np.ndarray, Y_pred: np.ndarray) -> float:
+    """
+    Avalia a precisão das predições.
+
+    Args:
+        Y_true (np.ndarray): Valores reais das classes.
+        Y_pred (np.ndarray): Valores previstos.
+
+    Returns:
+        float: Precisão em porcentagem.
+    """
+    correct = np.sum(Y_true == Y_pred)
+    total = Y_true.size
+    return (correct / total) * 100
 
 def sign(u: float) -> int:
     """
@@ -146,7 +166,7 @@ def adaline_train(
     w_random: bool = True,
     data_frame: pd.DataFrame = None,
     precision = 0.2
-) -> np.ndarray:
+) -> (np.ndarray, List[float]):
     """
     Implementa o ANALINE.
 
@@ -159,6 +179,7 @@ def adaline_train(
 
     Returns:
         np.ndarray: Vetor de pesos aprendido, com dimensão (p+1, 1).
+        List[float]: Histórico do erro quadrático médio por época.
     """
     
     p, N = X_train.shape
@@ -233,7 +254,7 @@ def adaline_train(
     plt.grid(alpha=0.3)
     plt.show()
 
-    return W
+    return W, history_of_mean_square_error
 
 def adaline_test(
     X_test: np.ndarray,
@@ -282,21 +303,27 @@ def main() -> None:
                         input_columns=["x", "y"],
                         target_column="spiral",
                         transpose=True,
+                        normalize=True,
                         test_size=0.2,
                         random_state=42)
 
     print(data['X'].shape)
     print(data['Y'].shape)
     
-    weights = adaline_train(X_train = data['X'],
+    weights, history_of_error = adaline_train(X_train = data['X'],
                                 Y_train = data['Y'].reshape(1, -1),
-                                epochs = 100,
-                                learning_rate = 0.1,
+                                epochs = 1000,
+                                learning_rate = 1e-4,
                                 w_random = True,
-                                data_frame = df)
-
+                                data_frame = df,
+                                precision=1e-8)
+    
     print("Pesos aprendidos:\n", weights)
     
+    predictions = adaline_test(X_test = data['X'], W = weights)
+    
+    accuracy = evaluate_accuracy(Y_true = data['Y'], Y_pred = predictions)
+    print(f"Precisao no teste: {accuracy:.2f}%")
 
 if __name__ == '__main__':
     main()

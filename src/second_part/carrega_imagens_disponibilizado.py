@@ -51,7 +51,7 @@ for i,pessoa in enumerate(caminho_pessoas):
             Y,
             y
         ),axis=1)
-       
+    
 
     
 
