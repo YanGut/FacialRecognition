@@ -136,10 +136,10 @@ def simple_perceptron(
     p, N = X_train.shape
     
     if w_random:
-        W = np.random.random_sample((p, 1)) - 0.5
+        W = np.random.rand(p, 1) - 0.5
     else:
         W = np.zeros((p, 1))
-
+    
     # Configuração inicial do gráfico
     plt.figure(figsize=(8, 6))
     if data_frame is not None:
