@@ -99,6 +99,35 @@ def prepare_data(
         'Y': Y,
     }
 
+def plot_training_data(data_frame: pd.DataFrame) -> None:
+    """Plota os dados de treinamento."""
+    plt.scatter(data_frame[data_frame['spiral'] == 1.0]['x'],
+                data_frame[data_frame['spiral'] == 1.0]['y'], 
+                color='blue', label='Classe 1.0', alpha=0.7)
+    plt.scatter(data_frame[data_frame['spiral'] == -1.0]['x'], 
+                data_frame[data_frame['spiral'] == -1.0]['y'], 
+                color='red', label='Classe -1.0', alpha=0.7)
+    plt.title('Treinamento do Perceptron - Linha de Decisão', fontsize=16)
+    plt.xlabel('X', fontsize=14)
+    plt.ylabel('Y', fontsize=14)
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.xlim(-20, 20)
+    plt.ylim(-20, 20)
+
+def update_decision_boundary(W: np.ndarray, x_axis: np.ndarray) -> None:
+    """Atualiza a linha de decisão no gráfico."""
+    x2 = -W[1, 0] / W[2, 0] * x_axis + W[0, 0] / W[2, 0]
+    x2 = np.nan_to_num(x2)
+    plt.plot(x_axis, x2, color='orange', alpha=0.1)
+    plt.pause(0.1)
+
+def plot_final_decision_boundary(W: np.ndarray, x_axis: np.ndarray) -> None:
+    """Plota a linha de decisão final."""
+    x2 = -W[1, 0] / W[2, 0] * x_axis + W[0, 0] / W[2, 0]
+    x2 = np.nan_to_num(x2)
+    plt.plot(x_axis, x2, color='green', linewidth=2)
+
 def sign(u: float) -> int:
     """
     Função de ativação degrau.
@@ -116,84 +145,90 @@ def simple_perceptron(
     Y_train: np.ndarray,
     epochs: int = 1000,
     learning_rate: float = 0.01,
+    tolerance: float = 1e-4,
+    patience: int = 5,
     w_random: bool = True,
     data_frame: pd.DataFrame = None
-) -> np.ndarray:
+) -> tuple[np.ndarray, list[float]]:
     """
-    Implementa o Perceptron Simples.
+    Implementa o Perceptron Simples com critérios avançados de parada.
 
     Args:
         X_train (np.ndarray): Entradas de treinamento, com dimensão (p+1, N), incluindo bias.
         Y_train (np.ndarray): Rótulos de treinamento, com dimensão (1, N).
-        epochs (int): Número de épocas.
+        epochs (int): Número máximo de épocas.
         learning_rate (float): Taxa de aprendizado.
+        tolerance (float): Norma mínima da atualização dos pesos para critério de convergência.
+        patience (int): Número de épocas sem melhora antes de ativar o early stopping.
         w_random (bool): Inicializar pesos aleatoriamente (True) ou como zeros (False).
+        data_frame (pd.DataFrame, opcional): DataFrame para visualização dos dados.
 
     Returns:
-        np.ndarray: Vetor de pesos aprendido, com dimensão (p+1, 1).
+        tuple[np.ndarray, list[float]]: 
+            - Vetor de pesos aprendido, com dimensão (p+1, 1).
+            - Histórico de erro quadrático médio por época.
     """
-    error = True
     p, N = X_train.shape
-    
-    if w_random:
-        W = np.random.rand(p, 1) - 0.5
-    else:
-        W = np.zeros((p, 1))
-    
-    # Configuração inicial do gráfico
-    plt.figure(figsize=(8, 6))
-    if data_frame is not None:
-        plt.scatter(data_frame[data_frame['spiral'] == 1.0]['x'],
-                    data_frame[data_frame['spiral'] == 1.0]['y'], 
-                    color='blue', label='Classe 1.0', alpha=0.7)
-        plt.scatter(data_frame[data_frame['spiral'] == -1.0]['x'], 
-                    data_frame[data_frame['spiral'] == -1.0]['y'], 
-                    color='red', label='Classe -1.0', alpha=0.7)
-    plt.title('Treinamento do Perceptron - Linha de Decisão', fontsize=16)
-    plt.xlabel('X', fontsize=14)
-    plt.ylabel('Y', fontsize=14)
-    plt.legend()
-    plt.grid(alpha=0.3)
-    plt.xlim(-20, 20)
-    plt.ylim(-20, 20)
+    W = (np.random.random_sample((p, 1)) - 0.5) if w_random else np.zeros((p, 1))
+    mse_history = []
+    no_improve_count = 0
 
-    x_axis = np.linspace(-15, 15, 100)
+    # Configuração inicial do gráfico
+    if data_frame is not None:
+        plt.figure(figsize=(8, 6))
+        plot_training_data(data_frame)
+        x_axis = np.linspace(-15, 15, 100)
 
     for epoch in range(epochs):
-        if not error:
-            break
+        errors = []
+        weight_update_norm = 0
 
-        error = False  # Reseta o erro antes de cada época
         for t in range(N):
             x_t = X_train[:, t].reshape(p, 1)
             d_t = Y_train[0, t]
 
+            # Calcula predição e erro
             u_t = W.T @ x_t
             y_t = sign(u_t[0, 0])
             e_t = d_t - y_t
+            
+            # Atualiza pesos
+            weight_update = learning_rate * e_t * x_t / 2
+            W += weight_update
+            weight_update_norm += np.linalg.norm(weight_update)
 
-            W += (learning_rate * e_t * x_t) / 2
+            errors.append(e_t ** 2)
 
-            if y_t != d_t:
-                error = True
+        # Calcula erro quadrático médio
+        mse = np.mean(errors)
+        mse_history.append(mse)
 
-        # Atualiza a linha de decisão no mesmo gráfico
-        if W[2, 0] != 0:
-            x2 = -W[1, 0] / W[2, 0] * x_axis + W[0, 0] / W[2, 0]
-            x2 = np.nan_to_num(x2)
-            plt.plot(x_axis, x2, color='orange', alpha=0.1)
+        # Critério de parada: norma da atualização dos pesos
+        if weight_update_norm < tolerance:
+            print(f"Convergência alcançada na época {epoch + 1} devido à tolerância.")
+            break
 
-        plt.pause(0.1)  # Pequena pausa para visualização
+        # Early stopping baseado no erro
+        if mse == 0:
+            no_improve_count += 1
+            if no_improve_count >= patience:
+                print("Early stopping ativado devido a nenhuma melhora no erro.")
+                break
+        else:
+            no_improve_count = 0
+
+        # Atualiza a linha de decisão no gráfico
+        if data_frame is not None and W[2, 0] != 0:
+            update_decision_boundary(W, x_axis)
 
     # Linha final após o término do treinamento
-    if W[2, 0] != 0:
-        x2 = -W[1, 0] / W[2, 0] * x_axis + W[0, 0] / W[2, 0]
-        x2 = np.nan_to_num(x2)
-        plt.plot(x_axis, x2, color='green', linewidth=2)
+    if data_frame is not None and W[2, 0] != 0:
+        plot_final_decision_boundary(W, x_axis)
 
-    plt.show()
+    if data_frame is not None:
+        plt.show()
 
-    return W
+    return W, mse_history
 
 def simple_perceptron_test(
     X_test: np.ndarray,
@@ -232,6 +267,11 @@ def simple_perceptron_test(
 
 
 def main() -> None:
+    R = 500
+    epochs = 1000
+    learning_rate = 0.01
+    separe_data_with_sklearn = False
+    
     columns = ["x", "y", "spiral"]
     df: pd.DataFrame = load_csv_data(filepath = "resources/spiral.csv", columns = columns, transpose = False)
     print(df.head())

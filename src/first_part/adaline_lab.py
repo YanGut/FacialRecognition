@@ -230,9 +230,9 @@ def adaline_train(
     p, N = X_train.shape
     history_of_mse = []
     previous_mse, current_mse = 0, 1
-
-    # Inicialização dos pesos
     W = (np.random.random_sample((p, 1)) - 0.5) if w_random else np.zeros((p, 1))
+    no_improvement = 0
+    mse_history = []
 
     # Configuração inicial do gráfico
     if data_frame is not None:

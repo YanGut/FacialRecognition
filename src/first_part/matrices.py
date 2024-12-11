@@ -13,7 +13,7 @@ def confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray: Matriz de confusão.
     """
-    
+
     true_positive = np.sum((y_pred == 1) & (y_true == 1))
     true_negative = np.sum((y_pred == -1) & (y_true == -1))
     false_positive = np.sum((y_pred == 1) & (y_true == -1))
@@ -40,9 +40,9 @@ def plot_confusion_matrix(
     Returns:
         None
     """
+    fig, axes = plt.subplots(1, 2, figsize=(15, 5))
     
-    sns.heatmap(confusion_matrix_x1, annot=True, fmt="d", cmap="Blues", 
-                xticklabels=["Pred -1", "Pred 1"], yticklabels=["True -1", "True 1"], ax=axes[0])
+    sns.heatmap(confusion_matrix_x1, annot=True, fmt="d", cmap="Blues", xticklabels=["Pred -1", "Pred 1"], yticklabels=["True -1", "True 1"], ax=axes[0])
     axes[0].set_title(f"Melhor {model_name}")
     axes[0].set_xlabel("Previsão")
     axes[0].set_ylabel("Valor Real")

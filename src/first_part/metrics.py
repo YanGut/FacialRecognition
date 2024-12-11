@@ -1,6 +1,8 @@
 import numpy as np
 from typing import List, Tuple, Dict, Union
 import pandas as pd
+import matplotlib.pyplot as plt
+from matrices import confusion_matrix
 
 def calculate_metrics(predictions: np.ndarray, Y_test: np.ndarray) -> (float, float, float):
     """
@@ -46,13 +48,13 @@ def update_results(
         None
     """
     
-    accuracy, sensitivity, specificity = calculate_metrics(predictions, y_test)
+    accuracy, sensitivity, specificity = calculate_metrics(predictions, Y_test)
 
     metrics["accuracy"].append(accuracy)
     metrics["sensitivity"].append(sensitivity)
     metrics["specificity"].append(specificity)
 
-    results.append({"accuracy": accuracy, "conf_matrix": conf_matrix(y_test, predictions), "mse": mse_history})
+    results.append({"accuracy": accuracy, "conf_matrix": confusion_matrix(Y_test, predictions), "mse": mse_history})
 
 def build_summary(metrics: Tuple[float, float, float]) -> pd.DataFrame:
     """
@@ -101,6 +103,7 @@ def plot_leaning_curves(best_case_mse: List[float], worst_case_mse: List[float],
     Returns:
         None
     """
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6), sharey=True)
     
     axs[0].plot(range(1, len(best_case_mse) + 1), best_case_mse, marker='o', linestyle='-', color='g')
     axs[0].set_title(f"{title} - Melhor Caso")
