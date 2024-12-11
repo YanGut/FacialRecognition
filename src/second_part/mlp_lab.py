@@ -5,114 +5,89 @@ from sklearn.model_selection import train_test_split
 import seaborn as sns
 import os
 from typing import List, Tuple, Dict, Union
-from matrices import confusion_matrix, plot_confusion_matrix
+from matrices import calculate_confusion_matrix, plot_confusion_matrix
 from metrics import calculate_metrics, update_results, build_summary, plot_leaning_curves
+import cv2
 
-def load_csv_data(filepath: str, columns: List[str], sep: str = ',') -> pd.DataFrame:
+def load_images(pasta_raiz: str, dimensao: int, C: int = 20) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Carrega o dataset EMG e organiza as colunas.
+    Carrega e processa as imagens para reconhecimento facial.
 
     Args:
-        filepath (str): Caminho para o arquivo.
-        columns (List[str]): Lista com os nomes das colunas.
-        transpose (bool): Transpor o DataFrame.
-        sep (str): Separador dos dados.
+        pasta_raiz (str): Caminho para a pasta raiz contendo as subpastas de cada pessoa.
+        dimensao (int): Dimensão para redimensionar as imagens (dimensao x dimensao).
+        C (int): Número total de classes (pessoas).
 
     Returns:
-        pd.DataFrame: DataFrame com dados dos sensores e classes.
+        Tuple[np.ndarray, np.ndarray]: Matriz de dados X (p x N) e matriz de rótulos Y (C x N).
     """
-    
-    df: pd.DataFrame = pd.read_csv(filepath, header=None, sep=sep)
-    
-    df.columns = columns
-    
-    return df
+    caminho_pessoas = [x[0] for x in os.walk(pasta_raiz)]
+    caminho_pessoas.pop(0)
 
-def plot_data(df: pd.DataFrame) -> None:
-    plt.figure(figsize=(8, 6))
+    X = np.empty((dimensao * dimensao, 0))  # Matriz de dados
+    Y = np.empty((C, 0))  # Matriz de rótulos
 
-    plt.scatter(df[df['spiral'] == 1.0]['x'], 
-                df[df['spiral'] == 1.0]['y'], 
-                color='blue', label='Classe 1.0', alpha=0.7)
+    for i, pessoa in enumerate(caminho_pessoas):
+        imagens_pessoa = os.listdir(pessoa)
+        for imagem in imagens_pessoa:
+            caminho_imagem = os.path.join(pessoa, imagem)
+            imagem_original = cv2.imread(caminho_imagem, cv2.IMREAD_GRAYSCALE)
+            imagem_redimensionada = cv2.resize(imagem_original, (dimensao, dimensao))
 
-    plt.scatter(df[df['spiral'] == -1.0]['x'], 
-                df[df['spiral'] == -1.0]['y'], 
-                color='red', label='Classe -1.0', alpha=0.7)
+            # Vetorizando a imagem
+            x = imagem_redimensionada.flatten()
 
-    plt.title('Gráfico de Dispersão (Espalhamento)', fontsize=16)
-    plt.xlabel('X', fontsize=14)
-    plt.ylabel('Y', fontsize=14)
+            # Empilhando amostra para criar a matriz X
+            X = np.concatenate((X, x.reshape(dimensao * dimensao, 1)), axis=1)
 
-    plt.legend()
+            # One-hot encoding
+            y = one_hot_encode(i, C)
+            Y = np.concatenate((Y, y), axis=1)
 
-    plt.grid(alpha=0.3)
-    plt.show()
+    return X, Y
 
-def plot_training_data(data_frame: pd.DataFrame) -> None:
-    """Plota os dados de treinamento."""
-    plt.scatter(data_frame[data_frame['spiral'] == 1.0]['x'],
-                data_frame[data_frame['spiral'] == 1.0]['y'], 
-                color='blue', label='Classe 1.0', alpha=0.7)
-    plt.scatter(data_frame[data_frame['spiral'] == -1.0]['x'], 
-                data_frame[data_frame['spiral'] == -1.0]['y'], 
-                color='red', label='Classe -1.0', alpha=0.7)
-    plt.title('Treinamento do Adaline - Linha de Decisão', fontsize=16)
-    plt.xlabel('X', fontsize=14)
-    plt.ylabel('Y', fontsize=14)
-    plt.legend()
-    plt.grid(alpha=0.3)
-    plt.xlim(-20, 20)
-    plt.ylim(-20, 20)
+def one_hot_encode(index: int, C: int) -> np.ndarray:
+    """
+    Realiza o one-hot encoding para um índice de classe.
 
+    Args:
+        index (int): Índice da classe.
+        C (int): Número total de classes.
+
+    Returns:
+        np.ndarray: Vetor one-hot encoded.
+    """
+    y = -np.ones((C, 1))
+    y[index, 0] = 1
+    return y
 
 def prepare_data(
-    df: pd.DataFrame, 
-    input_columns: List[str], 
-    target_column: str,
+    X: np.ndarray,
+    Y: np.ndarray,
     transpose: bool = False,
-    normalize: bool = False,
+    normalize: bool = False
 ) -> dict:
     """
-    Prepara o conjunto de dados para redes neurais, organizando entradas, saídas e divisões.
-
+    Prepara os dados para treinamento e teste.
+    
     Args:
-        df (pd.DataFrame): DataFrame contendo o conjunto de dados.
-        input_columns (list[str]): Lista com os nomes das colunas de entrada.
-        target_column (str): Nome da coluna de saída (rótulos).
-        transpose (bool): Transpor o DataFrame. Default é False.
-
+        X (np.ndarray): Matriz de dados, com dimensão (p, N).
+        Y (np.ndarray): Matriz de rótulos, com dimensão (C, N).
+        transpose (bool): Transpor os dados.
+        normalize (bool): Normalizar os dados.
+    
     Returns:
-        dict: Um dicionário contendo os conjuntos organizados:
-            - 'X_train': Entradas para treinamento.
-            - 'X_test': Entradas para teste.
-            - 'Y_train': Rótulos para treinamento.
-            - 'Y_test': Rótulos para teste.
-    """    
-    X = df[[
-            input_columns[0],
-            input_columns[1]
-        ]].to_numpy()
-    Y = df[target_column[0]].to_numpy().reshape(-1, 1)
+        dict: Dicionário contendo as matrizes de dados e rótulos preparadas.
+    """     
+    if normalize:
+        min_values = np.min(X, axis=0)
+        max_values = np.max(X, axis=0)
+        normalized_data = (X - min_values) / (max_values - min_values)
+        X = 2 * normalized_data - 1
     
     if transpose:
         X = X.T
         Y = Y.T
-        
-        p, N = X.shape
-        X = np.concatenate((
-            -np.ones((1, N)),
-            X
-        ))
-        
-    else:
-        N, p = X.shape
-        X = np.concatenate((
-            -np.ones((N, 1)),
-            X
-        ), axis = 1)
-    
-    if normalize:
-        X = 2 * (X - X.min()) / (X.max() - X.min()) - 1
 
     return X, Y
 
@@ -192,13 +167,15 @@ def activation_derivate(
     
     raise ValueError("Either 'logistic' or 'hyperbolic' must be True.")
 
+activation_derivative = lambda a: 1 - a**2
+
 def mlp_train(
     data: np.ndarray,
     labels: np.ndarray,
     hidden_units: int,
-    last_layer_units: int = 1,
-    learning_rate: float = 0.01,
-    epochs: int = 100,
+    last_layer_units: int = 20,
+    learning_rate: float = 0.0001,
+    epochs: int = 1000,
     tolerance: float = 1e-3,
     patience: int = 10,
     transpose: bool = False
@@ -233,7 +210,7 @@ def mlp_train(
         np.random.randn(layers[i + 1], layers[i] + 1) * np.sqrt(2 / layers[i]) 
         for i in range(len(layers) - 1)
     ]
-    
+        
     mse_history = []
     no_improvement = 0
     
@@ -262,7 +239,7 @@ def mlp_train(
             no_improvement = 0
         
         if epoch > 0 and abs(mse_history[-1] - mse_history[-2]) < tolerance:
-            print(f"Converged at epoch {epoch}.")
+            print(f"Converged at epoch {epoch + 1}.")
             break
         
         # Backpropagation
@@ -271,6 +248,9 @@ def mlp_train(
         
         for l in range(len(weights) - 2, -1, -1):
             a_with_bias = np.vstack([np.ones((1, activations[l + 1].shape[1])), activations[l + 1]])
+            
+            # print(f"Activation derivative: {activation_derivate(u=activations[l + 1], logistic=False, hyperbolic=True).shape}")
+            print(f"w: {weights[l + 1][:, 1:].shape}")
             deltas[l] = np.dot(weights[l + 1][:, 1:].T, deltas[l + 1]) * activation_derivate(u=activations[l + 1], logistic=False, hyperbolic=True)
         
         for l in range(len(weights)):
@@ -303,34 +283,27 @@ def mlp_predict(
         activations = activation_function(u=z, logistic=False, hyperbolic=True)
     
     final_output = activations.T
-    print(f"Final output: {final_output.shape}")
-    predictions = np.where(final_output >= 0, 1, -1)
+    predictions = np.argmax(final_output, axis=1)
     
-    return predictions.flatten()
+    return predictions
 
 def main() -> None:
     R = 5
     epochs = 1000
     learning_rate = 0.01
-    tolerance = 1e-3
+    tolerance = 1e-4
     patience = 10
-    hidden_units = [8, 8, 8, 8, 8, 8, 8, 8]
-    last_layer_units = 1
+    hidden_units = [50, 50, 50]
+    last_layer_units = 20
     separe_data_with_sklearn = False
     
-    columns = ["x", "y", "spiral"]
-    df: pd.DataFrame = load_csv_data(filepath = "resources/spiral.csv", columns = columns)
-    print(df.head())
+    pasta_raiz = "resources/RecFac"
+    dimensao = 50
+    C = 20
+
+    X, Y = load_images(pasta_raiz, dimensao, C)
     
-    data, labels = prepare_data(
-        df=df, 
-        input_columns=["x", "y"], 
-        target_column=["spiral"],
-        transpose=False,
-        normalize=True
-    )
-    
-    plot_data(df)
+    data, labels = prepare_data(X, Y, transpose=True, normalize=True)
 
     # Monte Carlo
     n_samples = data.shape[0]
@@ -338,6 +311,7 @@ def main() -> None:
     results = []
 
     for i in range(R):
+        print(f"Starting iteration {i + 1}...")
         indices = np.arange(n_samples)
         np.random.shuffle(indices)
         data, labels = data[indices], labels[indices]
@@ -348,7 +322,7 @@ def main() -> None:
             N_train = int(0.8 * n_samples)
             X_train, Y_train = data[:N_train], labels[:N_train]
             X_test, Y_test = data[N_train:], labels[N_train:]
-        
+            
         weights, mse_history = mlp_train(
             data=X_train,
             labels=Y_train,
@@ -361,7 +335,7 @@ def main() -> None:
             transpose=True
         )
         predictions = mlp_predict(data=X_test, weights=weights)
-        update_results(metrics=metrics, results=results, predictions=predictions, Y_test=Y_test, mse_history=mse_history)
+        update_results(metrics=metrics, results=results, predictions=predictions, Y_test=Y_test, mse_history=mse_history, n_classes=C)
 
         if (i + 1) % 10 == 0:
             print(f"Finished iteration {i + 1}.")

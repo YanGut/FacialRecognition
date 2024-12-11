@@ -5,6 +5,8 @@ from sklearn.model_selection import train_test_split
 import seaborn as sns
 import os
 from typing import List, Tuple
+from matrices import confusion_matrix, plot_confusion_matrix
+from metrics import calculate_metrics, update_results, build_summary, plot_leaning_curves
 
 def load_csv_data(filepath: str, columns: List[str], transpose: bool, sep: str = ',') -> pd.DataFrame:
     """
@@ -141,25 +143,7 @@ def prepare_data(
     if normalize:
         X = 2 * (X - X.min()) / (X.max() - X.min()) - 1
 
-    return {
-        'X': X,
-        'Y': Y,
-    }
-
-def evaluate_accuracy(Y_true: np.ndarray, Y_pred: np.ndarray) -> float:
-    """
-    Avalia a precisão das predições.
-
-    Args:
-        Y_true (np.ndarray): Valores reais das classes.
-        Y_pred (np.ndarray): Valores previstos.
-
-    Returns:
-        float: Precisão em porcentagem.
-    """
-    correct = np.sum(Y_true == Y_pred)
-    total = Y_true.size
-    return (correct / total) * 100
+    return X, Y
 
 def sign(u: float) -> int:
     """
@@ -307,13 +291,18 @@ def adaline_test(
 
 
 def main() -> None:
+    R = 1
+    epochs = 1000
+    learning_rate = 0.01
+    separe_data_with_sklearn = False
+    
     columns = ["x", "y", "spiral"]
     df: pd.DataFrame = load_csv_data(filepath = "resources/spiral.csv", columns = columns, transpose = False)
     print(df.head())
     
     plot_data(df=df)
     
-    data = prepare_data(df = df,
+    data, labels = prepare_data(df = df,
                         input_columns=["x", "y"],
                         target_column="spiral",
                         transpose=True,
@@ -321,23 +310,58 @@ def main() -> None:
                         test_size=0.2,
                         random_state=42)
 
-    print(data['X'].shape)
-    print(data['Y'].shape)
+    print(data.shape)
+    print(labels.shape)
     
-    weights, history_of_error = adaline_train(X_train = data['X'],
-                                Y_train = data['Y'].reshape(1, -1),
-                                epochs = 1000,
-                                learning_rate = 1e-4,
-                                w_random = True,
-                                data_frame = df,
-                                precision=1e-8)
+    # Monte Carlo
+    n_samples = data.shape[1]  # Adjusted to match the shape (3, 1999)
+    metrics = {"accuracy": [], "sensitivity": [], "specificity": []}
+    results = []
+
+    for i in range(R):
+        indices = np.arange(n_samples)
+        np.random.shuffle(indices)
+        data, labels = data[:, indices], labels[indices]
+        
+        if separe_data_with_sklearn:
+            X_train, X_test, Y_train, Y_test = train_test_split(data.T, labels, test_size=0.2, random_state=42)
+            X_train, X_test = X_train.T, X_test.T  # Transpose back to (features, samples)
+        else:
+            N_train = int(0.8 * n_samples)
+            X_train, Y_train = data[:, :N_train], labels[:N_train]
+            X_test, Y_test = data[:, N_train:], labels[N_train:]
     
-    print("Pesos aprendidos:\n", weights)
+        weights, mse_history = adaline_train(
+            X_train = X_train,
+            Y_train = Y_train.reshape(1, -1),
+            epochs = 1000,
+            learning_rate = 1e-4,
+            w_random = True,
+            data_frame = df,
+            precision=1e-8
+        )
+        predictions = adaline_test(X_test = X_test, W = weights)
+        update_results(metrics=metrics, results=results, predictions=predictions, Y_test=Y_test, mse_history=mse_history)
+        
+        if (i + 1) % 10 == 0:
+            print(f"Finished iteration {i + 1}.")
     
-    predictions = adaline_test(X_test = data['X'], W = weights)
-    
-    accuracy = evaluate_accuracy(Y_true = data['Y'], Y_pred = predictions)
-    print(f"Precisao no teste: {accuracy:.2f}%")
+    bestPerceptron = results[np.argmax([r["accuracy"] for r in results])]
+    worstPerceptron = results[np.argmin([r["accuracy"] for r in results])]
+    summary = build_summary(metrics)
+
+    print(f"\n Resume of MLP metrics: \n")
+    print(summary)
+    plot_confusion_matrix(
+        bestPerceptron["conf_matrix"],
+        worstPerceptron["conf_matrix"],
+        "Perceptron"
+    )
+    plot_leaning_curves(
+        bestPerceptron["mse"],
+        worstPerceptron["mse"],
+        "Perceptron"
+    )
 
 if __name__ == '__main__':
     main()

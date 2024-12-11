@@ -5,6 +5,8 @@ from sklearn.model_selection import train_test_split
 import seaborn as sns
 import os
 from typing import List
+from matrices import confusion_matrix, plot_confusion_matrix
+from metrics import calculate_metrics, update_results, build_summary, plot_leaning_curves
 
 def load_csv_data(filepath: str, columns: List[str], transpose: bool, sep: str = ',') -> pd.DataFrame:
     """
@@ -52,9 +54,7 @@ def prepare_data(
     df: pd.DataFrame, 
     input_columns: List[str], 
     target_column: str,
-    transpose: bool = False,
-    test_size: float = 0.2, 
-    random_state: int = 42
+    transpose: bool = False
 ) -> dict:
     """
     Prepara o conjunto de dados para redes neurais, organizando entradas, saídas e divisões.
@@ -64,8 +64,6 @@ def prepare_data(
         input_columns (list[str]): Lista com os nomes das colunas de entrada.
         target_column (str): Nome da coluna de saída (rótulos).
         transpose (bool): Transpor o DataFrame. Default é False.
-        test_size (float): Proporção do conjunto de teste (0 a 1). Default é 0.2 (20%).
-        random_state (int): Semente para reprodutibilidade da divisão. Default é 42.
 
     Returns:
         dict: Um dicionário contendo os conjuntos organizados:
@@ -94,10 +92,7 @@ def prepare_data(
             X
         ), axis = 1)
 
-    return {
-        'X': X,
-        'Y': Y,
-    }
+    return X, Y
 
 def plot_training_data(data_frame: pd.DataFrame) -> None:
     """Plota os dados de treinamento."""
@@ -146,7 +141,7 @@ def simple_perceptron(
     epochs: int = 1000,
     learning_rate: float = 0.01,
     tolerance: float = 1e-4,
-    patience: int = 5,
+    patience: int = 10,
     w_random: bool = True,
     data_frame: pd.DataFrame = None
 ) -> tuple[np.ndarray, list[float]]:
@@ -267,35 +262,73 @@ def simple_perceptron_test(
 
 
 def main() -> None:
-    R = 500
+    R = 1
     epochs = 1000
     learning_rate = 0.01
     separe_data_with_sklearn = False
     
     columns = ["x", "y", "spiral"]
-    df: pd.DataFrame = load_csv_data(filepath = "resources/spiral.csv", columns = columns, transpose = False)
+    df: pd.DataFrame = load_csv_data(filepath="resources/spiral.csv", columns=columns, transpose=False)
     print(df.head())
     
     plot_data(df=df)
     
-    data = prepare_data(df = df,
-                        input_columns=["x", "y"],
-                        target_column="spiral",
-                        transpose=True,
-                        test_size=0.2,
-                        random_state=42)
+    data, labels = prepare_data(df=df,
+                                input_columns=["x", "y"],
+                                target_column="spiral",
+                                transpose=True)
 
-    print(data['X'].shape)
-    print(data['Y'].shape)
+    print(data.shape)
+    print(labels.shape)
     
-    weights = simple_perceptron(X_train = data['X'],
-                                Y_train = data['Y'].reshape(1, -1),
-                                epochs = 100,
-                                learning_rate = 0.1,
-                                w_random = True,
-                                data_frame = df)
+    # Monte Carlo
+    n_samples = data.shape[1]  # Adjusted to match the shape (3, 1999)
+    metrics = {"accuracy": [], "sensitivity": [], "specificity": []}
+    results = []
 
-    print("Pesos aprendidos:\n", weights)
+    for i in range(R):
+        indices = np.arange(n_samples)
+        np.random.shuffle(indices)
+        data, labels = data[:, indices], labels[indices]
+        
+        if separe_data_with_sklearn:
+            X_train, X_test, Y_train, Y_test = train_test_split(data.T, labels, test_size=0.2, random_state=42)
+            X_train, X_test = X_train.T, X_test.T  # Transpose back to (features, samples)
+        else:
+            N_train = int(0.8 * n_samples)
+            X_train, Y_train = data[:, :N_train], labels[:N_train]
+            X_test, Y_test = data[:, N_train:], labels[N_train:]
+
+        weights, mse_history = simple_perceptron(
+            X_train=X_train,
+            Y_train=Y_train.reshape(1, -1),
+            epochs=epochs,
+            learning_rate=learning_rate,
+            w_random=True,
+            data_frame=df
+        )
+        predictions = simple_perceptron_test(X_test, weights)
+        update_results(metrics=metrics, results=results, predictions=predictions, Y_test=Y_test, mse_history=mse_history)
+
+        if (i + 1) % 10 == 0:
+            print(f"Finished iteration {i + 1}.")
+
+    bestPerceptron = results[np.argmax([r["accuracy"] for r in results])]
+    worstPerceptron = results[np.argmin([r["accuracy"] for r in results])]
+    summary = build_summary(metrics)
+
+    print(f"\n Resume of MLP metrics: \n")
+    print(summary)
+    plot_confusion_matrix(
+        bestPerceptron["conf_matrix"],
+        worstPerceptron["conf_matrix"],
+        "Perceptron"
+    )
+    plot_leaning_curves(
+        bestPerceptron["mse"],
+        worstPerceptron["mse"],
+        "Perceptron"
+    )
     
 
 if __name__ == '__main__':
